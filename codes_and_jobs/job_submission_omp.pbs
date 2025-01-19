@@ -1,0 +1,59 @@
+#!/bin/bash
+#PBS -N OPENMP_MATRIX_TRANSPOSE
+#PBS -o ./openmp_output.out
+#PBS -e ./openmp_error.err
+#PBS -q short_cpuQ
+#PBS -l walltime=2:00:00
+#PBS -l select=1:ncpus=32:mem=10mb
+
+# Load the gcc91 module
+module load gcc91 || exit 1
+
+# Change to the working directory
+cd /home/nicolo.cecchin/ || exit 1
+
+# Compile the program
+g++ -std=c++11 -march=native -fopenmp omp.cpp -o matrix_transp_omp_time
+if [[ $? -ne 0 ]]; then
+    echo "Compilation failed!"
+    exit 1
+fi
+
+# Define the output file for the times
+OUTPUT_FILE="omp_results.csv"
+
+# Initialize the output file with a header
+echo "n_threads,n_matrix,iteration,checksym_time,transpose_time" > $OUTPUT_FILE
+
+# Define the list of thread counts
+THREAD_COUNTS=(1 2 4 8 16 32)
+
+# Loop over powers of two from 2^4 (16) to 2^12 (4096)
+for ((p=4; p<=12; p++)); do
+    n=$((2**p))  # Compute 2^p
+    for threads in "${THREAD_COUNTS[@]}"; do
+        export OMP_NUM_THREADS=$threads  # Set the number of threads
+        for ((i=1; i<=100; i++)); do
+            # Execute the program and collect the output
+            PROGRAM_OUTPUT=$(./matrix_transp_omp_time $n 2>/dev/null)
+            
+            if [[ $? -ne 0 ]]; then
+                echo "$n, $threads, $i, ERROR, ERROR" >> $OUTPUT_FILE
+                continue
+            fi
+
+            # Verify that the program output is in the correct format
+            if [[ -z "$PROGRAM_OUTPUT" || $(echo "$PROGRAM_OUTPUT" | grep -c ',') -ne 1 ]]; then
+                echo "$n, $threads, $i, ERROR, ERROR" >> $OUTPUT_FILE
+                continue
+            fi
+
+            # Extract times from the program output (assuming they are comma-separated)
+            CHECKSYM_TIME=$(echo "$PROGRAM_OUTPUT" | cut -d ',' -f 1)
+            TRANSPOSITION_TIME=$(echo "$PROGRAM_OUTPUT" | cut -d ',' -f 2)
+
+            # Combine results into a CSV row
+            echo "$threads,$n,$i,$CHECKSYM_TIME,$TRANSPOSITION_TIME" >> $OUTPUT_FILE
+        done
+    done
+done

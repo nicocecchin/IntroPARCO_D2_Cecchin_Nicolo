@@ -1,0 +1,44 @@
+#!/bin/bash
+#PBS -N MPI_MATRIX_TRANSPOSE
+#PBS -o ./mpi_output.out
+#PBS -e ./mpi_error.err
+#PBS -q short_cpuQ
+#PBS -l walltime=2:00:00
+#PBS -l select=1:ncpus=32:mpiprocs=32:mem=10mb
+
+module load gcc91 || exit 1
+module load mpich-3.2.1--gcc-9.1.0 || exit 1
+
+cd /home/nicolo.cecchin/ || exit 1
+
+# Compile the MPI implementation
+mpicxx -std=c++11 mpi.cpp -o matrix_transpose_mpi_time
+if [[ $? -ne 0 ]]; then
+    echo "Compilation failed!"
+    exit 1
+fi
+
+# Results file
+OUTPUT_FILE="mpi_results.csv"
+echo "n_processes,n_matrix,iteration,checksym_time,transpose_time" > $OUTPUT_FILE
+
+# Loop over matrix sizes and processes
+for ((p=4; p<=12; p++)); do
+    n=$((2**p))
+    for n_procs in 1 2 4 8 16 32; do
+        if ((n >= n_procs)); then
+            for ((i=1; i<=100; i++)); do
+                mpirun -np $n_procs ./matrix_transpose_mpi_time $n 2>/dev/null > temp_output.txt
+                if [[ $? -ne 0 || ! -s temp_output.txt ]]; then
+                    echo "$n_procs,$n,$i,ERROR,ERROR" >> $OUTPUT_FILE
+                    continue
+                fi
+
+                OUTPUT=$(cat temp_output.txt)
+                checksym_time=$(echo "$OUTPUT" | cut -d ',' -f 1)
+                transpose_time=$(echo "$OUTPUT" | cut -d ',' -f 2)
+                echo "$n_procs,$n,$i,$checksym_time,$transpose_time" >> $OUTPUT_FILE
+            done
+        fi
+    done
+done

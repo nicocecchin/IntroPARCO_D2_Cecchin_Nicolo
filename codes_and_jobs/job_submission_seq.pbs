@@ -1,0 +1,38 @@
+#!/bin/bash
+#PBS -N SEQUENTIAL_MATRIX_TRANSPOSE
+#PBS -o ./sequential_output.out
+#PBS -e ./sequential_error.err
+#PBS -q short_cpuQ
+#PBS -l walltime=2:00:00
+#PBS -l select=1:ncpus=1:mem=10mb
+
+module load gcc91 || exit 1
+
+cd /home/nicolo.cecchin/ || exit 1
+
+# Compile the sequential implementation
+g++ -std=c++11 seq.cpp -o matrix_transpose_seq_time
+if [[ $? -ne 0 ]]; then
+    echo "Compilation failed!"
+    exit 1
+fi
+
+# Results file
+OUTPUT_FILE="sequential_results.csv"
+echo "n_matrix,iteration,checksym_time,transpose_time" > $OUTPUT_FILE
+
+# Loop over matrix sizes
+for ((p=4; p<=12; p++)); do
+    n=$((2**p))
+    for ((i=1; i<=100; i++)); do
+        OUTPUT=$(./matrix_transpose_seq_time $n 2>/dev/null)
+        if [[ $? -ne 0 || -z "$OUTPUT" ]]; then
+            echo "$n,$i,ERROR,ERROR" >> $OUTPUT_FILE
+            continue
+        fi
+
+        checksym_time=$(echo "$OUTPUT" | cut -d ',' -f 1)
+        transpose_time=$(echo "$OUTPUT" | cut -d ',' -f 2)
+        echo "$n,$i,$checksym_time,$transpose_time" >> $OUTPUT_FILE
+    done
+done
